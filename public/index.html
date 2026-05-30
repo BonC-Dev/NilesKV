@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NilesKV</title>
+  <meta name="description" content="Content-addressable storage with cryptographic Merkle proofs. Built from scratch in Node.js.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:      #000;
+      --s1:      #050505;
+      --line:    rgba(255,255,255,0.09);
+      --line2:   rgba(255,255,255,0.16);
+      --t1:      rgba(255,255,255,0.95);
+      --t2:      rgba(255,255,255,0.58);
+      --t3:      rgba(255,255,255,0.18);
+      --amber:   #f5a623;
+      --amber-a: rgba(245,166,35,0.14);
+      --amber-g: rgba(245,166,35,0.28);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--t1); font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-thumb { background: #1c1c1c; border-radius: 2px; }
+
+    /* ── Loader ─────────────────────────────── */
+    #loader { position: fixed; inset: 0; z-index: 9999; background: #000; display: flex; align-items: center; justify-content: center; transition: opacity .6s, visibility .6s; }
+    #loader.out { opacity: 0; visibility: hidden; }
+    .l-track { width: 100px; height: 1px; background: #111; position: relative; overflow: hidden; }
+    .l-bar { position: absolute; top: 0; left: -100%; height: 1px; background: var(--amber); animation: lbar .8s cubic-bezier(0.4,0,0.2,1) forwards; }
+    @keyframes lbar { to { left: 0; } }
+
+    /* ══════════════ GLASS ══════════════════ */
+    .glass3d {
+      position: relative; z-index: 4;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.18);
+      border-top-color: rgba(245,166,35,0.45);
+      background: rgba(6,6,10,0.88);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.10) inset,
+        0 0 0 0.5px rgba(0,0,0,0.7),
+        0 0 30px rgba(245,166,35,0.08),
+        0 12px 40px rgba(0,0,0,0.7),
+        0 32px 80px rgba(0,0,0,0.5);
+      backdrop-filter: blur(28px) saturate(2);
+      -webkit-backdrop-filter: blur(28px) saturate(2);
+    }
+
+    /* ── Hero glow ring ─────────────────── */
+    .hero-ring {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 680px; height: 680px;
+      border-radius: 50%;
+      border: 1px solid rgba(245,166,35,0.15);
+      background: radial-gradient(circle, rgba(245,166,35,0.06) 0%, transparent 65%);
+      pointer-events: none; z-index: 1;
+      animation: rpulse 5s ease-in-out infinite;
+    }
+    .hero-ring::after {
+      content: ''; position: absolute; inset: 36px;
+      border-radius: 50%;
+      border: 1px solid rgba(245,166,35,0.09);
+    }
+    @keyframes rpulse { 0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.9;} 50%{transform:translate(-50%,-50%) scale(1.06);opacity:1;} }
+
+    /* ══════════════ HERO WRAPPER ═══════════ */
+    /* 220vh scroll space; .hero is sticky inside */
+    #heroScroll { position: relative; height: 220vh; }
+
+    .hero {
+      position: sticky; top: 0;
+      height: 100vh; min-height: 700px;
+      overflow: hidden;
+      display: flex; flex-direction: column;
+      background:
+        radial-gradient(ellipse 1300px 1100px at -5%  20%, rgba(245,166,35,0.60) 0%, transparent 50%),
+        radial-gradient(ellipse 1000px 1100px at 105% 80%, rgba(59,130,246,0.40)  0%, transparent 50%),
+        radial-gradient(ellipse  850px  700px at 85%   2%, rgba(139,92,246,0.32)  0%, transparent 50%),
+        radial-gradient(ellipse  700px  900px at 12%  98%, rgba(20,184,166,0.22)  0%, transparent 50%),
+        radial-gradient(ellipse  500px  500px at 50%  50%, rgba(245,166,35,0.07)  0%, transparent 70%),
+        #010103;
+    }
+    /* Grid overlay */
+    .hero::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background-image: linear-gradient(rgba(255,255,255,0.055) 1px,transparent 1px), linear-gradient(90deg,rgba(255,255,255,0.055) 1px,transparent 1px); background-size: 60px 60px; mask-image: radial-gradient(ellipse 95% 95% at 50% 50%, black 5%, transparent 100%); }
+
+    /* ── Nav ─────────────────────────────── */
+    .hero-nav { position: absolute; top: 0; left: 0; right: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 20px 32px; gap: 8px; }
+    .nav-logo-pill { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.18); flex-shrink: 0; }
+    .nav-links-pill { display: flex; align-items: center; gap: 28px; background: rgba(6,6,10,0.75); border: 1px solid rgba(255,255,255,0.16); border-radius: 100px; padding: 10px 26px; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+    .nav-link { font-size: 13px; font-weight: 400; color: rgba(255,255,255,0.70); text-decoration: none; transition: color .2s; }
+    .nav-link:hover { color: #fff; }
+    .nav-link-time { font-size: 13px; font-weight: 500; color: rgba(125,211,252,0.85); text-decoration: none; padding: 5px 13px; border-radius: 100px; background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.25); transition: background .2s, color .2s, border-color .2s; }
+    .nav-link-time:hover { background: rgba(56,189,248,0.16); border-color: rgba(56,189,248,0.45); color: rgba(186,230,253,1); }
+
+    /* ── Hero center ─────────────────────── */
+    .hero-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 10; text-align: center; width: 100%; padding: 0 20px; animation: fadeUp .8s cubic-bezier(0.16,1,0.3,1) .1s both; }
+    @keyframes fadeUp { from { opacity: 0; transform: translate(-50%, calc(-50% + 20px)); } to { opacity: 1; transform: translate(-50%,-50%); } }
+
+    @keyframes bdot { 0%,100%{box-shadow:0 0 0 0 rgba(245,166,35,0.6);}50%{box-shadow:0 0 0 6px rgba(245,166,35,0);} }
+
+    /* ── Cursor blob ────────────────────────── */
+    .cursor-blob {
+      position: fixed; top: 0; left: 0;
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      pointer-events: none; z-index: 9998;
+      background: radial-gradient(circle at center,
+        rgba(245,166,35,0.55) 0%,
+        rgba(245,100,0,0.25)  40%,
+        transparent 70%);
+      transform: translate(-50%,-50%);
+      filter: blur(6px);
+      mix-blend-mode: screen;
+      will-change: transform;
+      transition: width .4s cubic-bezier(0.16,1,0.3,1), height .4s cubic-bezier(0.16,1,0.3,1), opacity .4s;
+      opacity: 0;
+    }
+
+    /* ── Cursor-reactive title ──────────────── */
+    .hero-title-wrap { position: relative; display: inline-block; margin-bottom: 24px; }
+    .hero-title-base {
+      font-size: clamp(88px,12vw,168px);
+      font-weight: 700;
+      letter-spacing: -0.055em;
+      line-height: 0.86;
+      color: rgba(255,255,255,0.22);
+      display: block;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .hero-title-lit {
+      position: absolute; top: 0; left: 0; right: 0;
+      font-size: clamp(88px,12vw,168px);
+      font-weight: 700;
+      letter-spacing: -0.055em;
+      line-height: 0.86;
+      white-space: nowrap;
+      background: linear-gradient(120deg, #ffd166 0%, #f5a623 35%, #ff6b35 65%, #ffd166 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      -webkit-mask-image: radial-gradient(circle 160px at -999px -999px, #000 0%, transparent 70%);
+      mask-image: radial-gradient(circle 160px at -999px -999px, #000 0%, transparent 70%);
+      user-select: none;
+      pointer-events: none;
+    }
+
+    .hero-sub { font-size: clamp(15px,1.6vw,18px); color: rgba(255,255,255,0.62); font-weight: 300; max-width: 380px; margin: 0 auto 36px; line-height: 1.65; }
+
+    .hero-actions { display: flex; align-items: center; justify-content: center; gap: 12px; }
+    .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 12px 28px; border-radius: 100px; background: #fff; color: #000; font-size: 14px; font-weight: 500; text-decoration: none; transition: background .2s, transform .15s; }
+    .btn-primary:hover { background: rgba(255,255,255,.88); transform: translateY(-1px); }
+    .btn-ghost { display: inline-flex; align-items: center; gap: 6px; padding: 12px 28px; border-radius: 100px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,0.24); color: rgba(255,255,255,0.85); font-size: 14px; font-weight: 400; text-decoration: none; transition: border-color .2s, background .2s, transform .15s; }
+    .btn-ghost:hover { border-color: rgba(255,255,255,.42); background: rgba(255,255,255,.12); transform: translateY(-1px); }
+
+    /* ══════════════ FLOATING CARDS ═════════
+       Wrappers: position only. FC inner: rotation only.
+       JS drives translateX + opacity based on scrollY.
+    ═══════════════════════════════════════ */
+    .fc-wrap { position: absolute; will-change: transform, opacity; }
+
+    /* Positions */
+    .fc-wrap-tl { top: 10%; left: 0%; }
+    .fc-wrap-ml { top: 40%; left: -0.5%; }
+    .fc-wrap-bl { bottom: 8%;  left: 2%; }
+    .fc-wrap-tr { top:  7%; right: 0%; }
+    .fc-wrap-mr { top: 43%; right: -0.5%; }
+    .fc-wrap-br { bottom: 7%;  right: 1%; }
+
+    /* Card inner = carries rotation */
+    .fc { padding: 20px 24px; color: rgba(255,255,255,0.94); font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.75; white-space: nowrap; }
+    .fc-wrap-tl .fc { transform: rotate(-7deg);  width: 330px; }
+    .fc-wrap-ml .fc { transform: rotate(4deg);   width: 210px; }
+    .fc-wrap-bl .fc { transform: rotate(-5deg);  width: 210px; }
+    .fc-wrap-tr .fc { transform: rotate(6deg);   width: 260px; }
+    .fc-wrap-mr .fc { transform: rotate(-4deg);  width: 268px; }
+    .fc-wrap-br .fc { transform: rotate(7deg);   width: 252px; }
+
+    /* Card text helpers */
+    .fc-label { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(245,166,35,0.65); margin-bottom: 12px; }
+    .fc-amber { color: #f5a623; }
+    .fc-green  { color: #6ee7a0; }
+    .fc-blue   { color: #93c5fd; }
+    .fc-dim    { color: rgba(255,255,255,0.32); }
+    .fc-big    { font-size: 52px; font-weight: 600; font-family: 'Inter',sans-serif; letter-spacing: -0.04em; line-height: 1; color: #f5a623; margin-bottom: 4px; }
+    .fc-divider { height: 1px; background: rgba(255,255,255,0.10); margin: 12px 0; }
+    .fc-row    { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .fc-live   { display: inline-flex; align-items: center; gap: 6px; }
+    .fc-live-dot { width: 6px; height: 6px; border-radius: 50%; background: #6ee7a0; animation: bdot 2s ease infinite; }
+
+    /* ── Scroll cue ───────────────────────── */
+    .scroll-cue { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 20; display: flex; flex-direction: column; align-items: center; gap: 8px; animation: fadeUp .8s cubic-bezier(0.16,1,0.3,1) 1s both; pointer-events: none; }
+    .scroll-cue span { font-size: 9px; letter-spacing: .22em; text-transform: uppercase; color: rgba(255,255,255,0.22); font-family: 'JetBrains Mono',monospace; }
+    .scroll-cue-line { width: 1px; height: 40px; background: linear-gradient(to bottom, rgba(255,255,255,0.35), transparent); animation: sline 2s ease-in-out infinite; }
+    @keyframes sline { 0%{transform:scaleY(0);transform-origin:top;}48%{transform:scaleY(1);transform-origin:top;}52%{transform:scaleY(1);transform-origin:bottom;}100%{transform:scaleY(0);transform-origin:bottom;} }
+
+    /* ══════════════ TICKER ══════════════════ */
+    .ticker { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 14px 0; overflow: hidden; }
+    .ticker-track { display: flex; width: max-content; animation: roll 50s linear infinite; }
+    .ticker-track:hover { animation-play-state: paused; }
+    @keyframes roll { to { transform: translateX(-50%); } }
+    .ti { padding: 0 36px; white-space: nowrap; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--t2); letter-spacing: 0.12em; text-transform: uppercase; display: flex; align-items: center; gap: 36px; }
+    .ti::after { content: ''; width: 3px; height: 3px; border-radius: 50%; background: rgba(245,166,35,0.5); }
+
+    /* ══════════════ SHOWCASE ════════════════ */
+    .show-scroll { position: relative; height: 320vh; }
+    .show-sticky { position: sticky; top: 0; height: 100vh; display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
+
+    .show-left { display: flex; align-items: center; padding: 0 72px; border-right: 1px solid var(--line); position: relative; }
+    .show-panel { position: absolute; left: 0; right: 0; padding: 0 72px; opacity: 0; transform: translateY(32px); transition: opacity .6s cubic-bezier(0.16,1,0.3,1), transform .6s cubic-bezier(0.16,1,0.3,1); pointer-events: none; }
+    .show-panel.active { opacity: 1; transform: none; pointer-events: auto; }
+    .show-panel.exit-up { opacity: 0; transform: translateY(-32px); }
+
+    .panel-num { font-family: 'JetBrains Mono',monospace; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(245,166,35,0.7); margin-bottom: 10px; }
+    .panel-step { font-family: 'JetBrains Mono',monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); margin-bottom: 32px; padding: 5px 12px; border-radius: 4px; display: inline-block; background: rgba(245,166,35,0.10); border: 1px solid rgba(245,166,35,0.25); }
+    .panel-h { font-size: clamp(30px,3.2vw,48px); font-weight: 300; letter-spacing: -0.03em; line-height: 1.06; color: #fff; margin-bottom: 24px; }
+    .panel-h strong { font-weight: 600; color: #fff; }
+    .panel-p { font-size: 15px; color: var(--t2); line-height: 1.85; max-width: 360px; }
+    .panel-pips { display: flex; gap: 8px; margin-top: 48px; }
+    .pip { height: 3px; border-radius: 2px; background: rgba(255,255,255,0.14); transition: background .4s, width .5s cubic-bezier(0.16,1,0.3,1); width: 20px; }
+    .pip.on { background: var(--amber); width: 40px; }
+
+    /* Right: canvas fills the panel */
+    .show-right { display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.015); position: relative; }
+    .show-right::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 60% 60% at 50% 50%, rgba(245,166,35,0.04) 0%, transparent 70%); }
+    #showCanvas { display: block; position: relative; z-index: 1; }
+
+    /* ══════════════ SECTIONS ════════════════ */
+    .section { padding: 120px 48px; }
+    .inner { max-width: 1060px; margin: 0 auto; }
+    .sect-label { font-family: 'JetBrains Mono',monospace; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--t2); display: flex; align-items: center; gap: 16px; margin-bottom: 32px; }
+    .sect-label::before { content: ''; width: 24px; height: 1px; background: var(--t3); }
+    .sect-h { font-size: clamp(32px,4vw,56px); font-weight: 300; letter-spacing: -0.035em; line-height: 1.0; color: var(--t1); margin-bottom: 18px; }
+    .sect-h strong { font-weight: 600; }
+    .sect-h .a { color: var(--amber); }
+    .sect-sub { font-size: 15px; color: var(--t2); max-width: 440px; line-height: 1.8; }
+
+    [data-r] { opacity: 0; transform: translateY(28px); transition: opacity .8s cubic-bezier(0.16,1,0.3,1), transform .8s cubic-bezier(0.16,1,0.3,1); }
+    [data-r="f"] { transform: none; }
+    [data-r].in  { opacity: 1; transform: none; }
+
+    /* ── Demo ─────────────────────────────── */
+    .demo-sect { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--s1); }
+    .demo-hd { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: end; margin-bottom: 56px; }
+    .demo-grid { display: grid; grid-template-columns: 320px 1fr; gap: 24px; align-items: start; }
+    .steps { display: flex; flex-direction: column; gap: 6px; }
+    .sc { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; transition: border-color .25s, box-shadow .25s; }
+    .sc.active { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber),0 4px 24px rgba(245,166,35,.06); }
+    .sc.done { border-color: rgba(245,166,35,.3); }
+    .sc-hd { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+    .sc-n { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line2); display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono',monospace; font-size: 9px; color: var(--t2); flex-shrink: 0; transition: all .25s; }
+    .sc.active .sc-n { border-color: var(--amber); background: var(--amber-a); color: var(--amber); }
+    .sc.done  .sc-n  { border-color: var(--amber); background: var(--amber); color: #000; }
+    .sc-title { font-size: 13px; font-weight: 500; color: var(--t1); }
+    .sc-ep { font-family: 'JetBrains Mono',monospace; font-size: 10px; color: var(--t2); margin-top: 2px; }
+    .sc-body { display: none; padding: 0 16px 16px; }
+    .sc.active .sc-body { display: block; }
+    .fl { margin-bottom: 12px; }
+    .fl label { display: block; font-size: 11px; font-weight: 500; color: rgba(255,255,255,.6); margin-bottom: 6px; }
+    .fi { width: 100%; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.14); border-radius: 6px; padding: 9px 12px; color: rgba(255,255,255,.90); font-family: 'JetBrains Mono',monospace; font-size: 12px; outline: none; resize: vertical; transition: border-color .2s,box-shadow .2s; }
+    .fi:focus { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-a); }
+    .ab { width: 100%; padding: 10px; font-family: 'Inter',sans-serif; font-size: 13px; font-weight: 500; border: none; border-radius: 6px; cursor: pointer; transition: transform .15s,box-shadow .2s; }
+    .ab:hover { transform: translateY(-1px); } .ab:active { transform: none; } .ab:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+    .ab.a { background: var(--amber); color: #000; } .ab.a:hover { box-shadow: 0 4px 18px var(--amber-g); }
+    .ab.b { background: rgba(255,255,255,.08); color: var(--t1); } .ab.b:hover { background: rgba(255,255,255,.12); }
+    .term { background: #020202; border: 1px solid var(--line2); border-radius: 8px; overflow: hidden; position: sticky; top: 68px; }
+    .term-bar { display: flex; align-items: center; gap: 6px; padding: 9px 14px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.02); }
+    .td { width: 10px; height: 10px; border-radius: 50%; } .td.r{background:#ff5f57;} .td.y{background:#febc2e;} .td.g{background:#28c840;}
+    .term-ttl { font-family: 'JetBrains Mono',monospace; font-size: 10px; color: var(--t2); margin-left: 6px; }
+    .term-body { padding: 20px; min-height: 340px; max-height: 440px; overflow-y: auto; font-family: 'JetBrains Mono',monospace; font-size: 11.5px; line-height: 1.85; }
+    .term-ph { color: #1e1e1e; }
+    .t-req{color:#6b7cff;} .t-k{color:#9da5ff;} .t-s{color:#7fd6a0;} .t-n{color:var(--amber);}
+    .t-b{color:#f87171;} .t-h{color:var(--amber);cursor:pointer;} .t-h:hover{text-decoration:underline;}
+    .t-ok{color:#7fd6a0;} .t-err{color:#f87171;} .t-dim{color:#1c1c1c;}
+
+    /* ── Proof ────────────────────────────── */
+    .proof-section { border-top: 1px solid var(--line); }
+    .proof-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start; margin-top: 64px; }
+    .pchain { display: flex; flex-direction: column; gap: 4px; }
+    .pn { display: flex; align-items: flex-start; gap: 14px; padding: 12px 14px; border-radius: 6px; border: 1px solid transparent; opacity: 0; transform: translateX(-14px); transition: opacity .45s cubic-bezier(0.16,1,0.3,1),transform .45s cubic-bezier(0.16,1,0.3,1); }
+    .pn.show{opacity:1;transform:none;}
+    .pn.leaf{border-color:rgba(245,166,35,.22);background:rgba(245,166,35,.05);}
+    .pn.sib{border-color:rgba(255,255,255,.09);background:rgba(255,255,255,.025);}
+    .pn.hsh{border-color:rgba(255,255,255,.07);}
+    .pn.mroot{border-color:rgba(245,166,35,.38);background:rgba(245,166,35,.08);}
+    .pn-marker{width:6px;flex-shrink:0;margin-top:5px;}
+    .pn-dot{width:6px;height:6px;border-radius:50%;border:1px solid var(--t3);}
+    .pn.leaf .pn-dot,.pn.mroot .pn-dot{border-color:var(--amber);background:var(--amber);}
+    .pn.sib .pn-dot{border-color:var(--t2);}
+    .pn-tag{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px;color:var(--t2);}
+    .pn.leaf .pn-tag,.pn.mroot .pn-tag{color:var(--amber);}
+    .pn-hash{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);word-break:break-all;}
+    .proof-ok{display:inline-flex;align-items:center;gap:8px;margin-top:20px;padding:10px 18px;border-radius:6px;background:var(--amber-a);border:1px solid rgba(245,166,35,.32);color:var(--amber);font-size:12px;font-weight:500;opacity:0;transform:translateY(8px);transition:all .45s .15s cubic-bezier(0.16,1,0.3,1);}
+    .proof-ok.show{opacity:1;transform:none;}
+
+    /* ── Spec ─────────────────────────────── */
+    .spec-section { border-top: 1px solid var(--line); }
+    .spec-list { border-top: 1px solid var(--line); margin-top: 56px; }
+    .spec-item { display: grid; grid-template-columns: 52px 1fr 170px; gap: 40px; padding: 40px 0; border-bottom: 1px solid var(--line); align-items: start; transition: background .2s; }
+    .spec-item:hover { background: rgba(255,255,255,.02); margin: 0 -24px; padding-left: 24px; padding-right: 24px; }
+    .spec-n { font-family: 'JetBrains Mono',monospace; font-size: 10px; color: var(--t2); padding-top: 3px; }
+    .spec-title { font-size: 16px; font-weight: 500; letter-spacing: -0.01em; margin-bottom: 10px; }
+    .spec-desc { font-size: 13.5px; color: var(--t2); line-height: 1.75; }
+    .spec-aside { text-align: right; padding-top: 3px; }
+    .spec-val { font-family: 'JetBrains Mono',monospace; font-size: 13px; color: var(--amber); display: block; }
+    .spec-val-l { font-family: 'JetBrains Mono',monospace; font-size: 9px; color: var(--t2); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 4px; display: block; }
+
+    /* ── Stats ────────────────────────────── */
+    .stats-section { padding: 96px 48px; border-top: 1px solid var(--line); }
+    .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; max-width: 960px; margin: 0 auto; }
+    .stat { padding: 48px 32px; background: var(--bg); text-align: center; }
+    .stat-n { font-family: 'JetBrains Mono',monospace; font-size: 46px; font-weight: 500; line-height: 1; letter-spacing: -0.02em; color: var(--amber); margin-bottom: 10px; }
+    .stat-l { font-size: 13px; color: var(--t2); }
+
+    /* ── Footer ───────────────────────────── */
+    footer { padding: 48px; border-top: 1px solid var(--line); }
+    .foot-in { max-width: 1060px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+    .foot-logo { font-family: 'JetBrains Mono',monospace; font-size: 13px; color: var(--t2); }
+    .foot-logo span { color: var(--amber); }
+    .foot-links { display: flex; gap: 24px; }
+    .foot-link { font-size: 12px; color: var(--t2); text-decoration: none; transition: color .2s; }
+    .foot-link:hover { color: var(--t1); }
+    .foot-copy { font-family: 'JetBrains Mono',monospace; font-size: 10px; color: #252525; }
+
+    /* ── Toasts ───────────────────────────── */
+    .toasts{position:fixed;bottom:20px;right:20px;z-index:8000;display:flex;flex-direction:column;gap:6px;pointer-events:none;}
+    .toast{display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:7px;background:#111;border:1px solid #222;font-size:12px;color:var(--t1);pointer-events:all;box-shadow:0 8px 32px rgba(0,0,0,.7);animation:tin .3s cubic-bezier(0.16,1,0.3,1);}
+    .toast.out{animation:tout .2s ease forwards;}
+    .tpip{width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+    .toast.success .tpip{background:var(--amber);}.toast.error .tpip{background:#f87171;}.toast.info .tpip{background:#6b7cff;}
+    @keyframes tin{from{opacity:0;transform:translateX(12px);}}
+    @keyframes tout{to{opacity:0;transform:translateX(12px);}}
+
+    /* ── Responsive ───────────────────────── */
+    @media(max-width:1100px){.fc-wrap-ml,.fc-wrap-bl,.fc-wrap-mr,.fc-wrap-br{display:none;}}
+    @media(max-width:900px){.fc-wrap{display:none;}.show-sticky{grid-template-columns:1fr;}.show-right{display:none;}.demo-grid{grid-template-columns:1fr;}.proof-grid{grid-template-columns:1fr;gap:40px;}.spec-item{grid-template-columns:40px 1fr;}.spec-aside{display:none;}.stats-row{grid-template-columns:1fr 1fr;}.demo-hd{grid-template-columns:1fr;}}
+    @media(max-width:600px){.hero-title{font-size:60px;}.section{padding:80px 20px;}.show-panel{padding:0 28px;}.stats-row{grid-template-columns:1fr 1fr;}.foot-in{flex-direction:column;text-align:center;}.foot-links{flex-wrap:wrap;justify-content:center;}}
+  </style>
+</head>
+<body>
+
+<div id="loader"><div class="l-track"><div class="l-bar"></div></div></div>
+<div class="toasts" id="toasts"></div>
+<div class="cursor-blob" id="cursorBlob"></div>
+
+<!-- ═══════════ HERO ═══════════ -->
+<div id="heroScroll">
+<section class="hero">
+
+  <!-- Left cards -->
+  <div class="fc-wrap fc-wrap-tl" data-side="left" data-stagger="0">
+    <div class="glass3d fc">
+      <div class="fc-label">Insert</div>
+      <span class="fc-dim">niles.</span><span class="fc-amber">set</span><span class="fc-dim">(</span><span class="fc-green">'user:42'</span><span class="fc-dim">, {</span><br>
+      &nbsp;&nbsp;<span class="fc-blue">name</span><span class="fc-dim">:</span> <span class="fc-green">'Alice'</span><span class="fc-dim">,</span><br>
+      &nbsp;&nbsp;<span class="fc-blue">role</span><span class="fc-dim">:</span> <span class="fc-green">'admin'</span><br>
+      <span class="fc-dim">})</span>
+      <div class="fc-divider"></div>
+      <span class="fc-dim">&#8594; </span><span class="fc-amber">a3f8c2d1</span><span class="fc-green">&nbsp;staged ✓</span>
+    </div>
+  </div>
+
+  <div class="fc-wrap fc-wrap-ml" data-side="left" data-stagger="1">
+    <div class="glass3d fc" style="text-align:center;padding:22px 28px;">
+      <div class="fc-label" style="margin-bottom:8px">Verify time</div>
+      <div class="fc-big">7</div>
+      <div style="color:#f5a623;font-size:15px;font-weight:500;letter-spacing:-0.01em;margin-bottom:5px">microseconds</div>
+      <div style="color:rgba(255,255,255,0.35);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase">proof verification</div>
+    </div>
+  </div>
+
+  <div class="fc-wrap fc-wrap-bl" data-side="left" data-stagger="2">
+    <div class="glass3d fc" style="text-align:center;padding:22px 28px;">
+      <div class="fc-label" style="margin-bottom:8px">Throughput</div>
+      <div class="fc-big" style="font-size:42px">13.8k</div>
+      <div style="color:rgba(255,255,255,0.50);font-size:11px;letter-spacing:0.02em">inserts / sec</div>
+    </div>
+  </div>
+
+  <!-- Right cards -->
+  <div class="fc-wrap fc-wrap-tr" data-side="right" data-stagger="0">
+    <div class="glass3d fc">
+      <div class="fc-label">Latest commit</div>
+      <div style="margin-bottom:6px"><span class="fc-amber" style="font-size:12px;letter-spacing:0.02em">a3f8c2d1·8b3d7e2f</span></div>
+      <div class="fc-dim" style="font-size:11px">c5a1f9e4·3b7d2a91...</div>
+      <div class="fc-divider"></div>
+      <div class="fc-row">
+        <span class="fc-dim">Commit #12</span>
+        <span class="fc-green">1,024 docs</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="fc-wrap fc-wrap-mr" data-side="right" data-stagger="1">
+    <div class="glass3d fc">
+      <div class="fc-label">WAL entry #4,892</div>
+      <div style="margin-bottom:8px"><span class="fc-amber" style="font-size:13.5px">SET</span> <span class="fc-blue">user:42</span></div>
+      <div class="fc-dim" style="font-size:11px">&#8594; 0xa3f8c2d1b7e9...</div>
+      <div class="fc-divider"></div>
+      <div class="fc-live"><span class="fc-live-dot"></span><span class="fc-green">fsynced</span></div>
+    </div>
+  </div>
+
+  <div class="fc-wrap fc-wrap-br" data-side="right" data-stagger="2">
+    <div class="glass3d fc">
+      <div class="fc-label">Proof result</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6ee7a0" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        <span class="fc-green" style="font-size:13px">Cryptographically verified</span>
+      </div>
+      <div class="fc-divider"></div>
+      <div class="fc-row">
+        <span class="fc-dim">3 Merkle steps</span>
+        <span class="fc-amber" style="font-size:13px">0.007ms</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Glow ring -->
+  <div class="hero-ring"></div>
+
+  <!-- Center -->
+  <div class="hero-center">
+    <div class="hero-title-wrap" id="titleWrap">
+      <span class="hero-title-base" aria-label="NilesKV">NilesKV</span>
+      <span class="hero-title-lit" id="titleLit" aria-hidden="true">NilesKV</span>
+    </div>
+
+    <p class="hero-sub">The database that proves itself. Content-addressable, cryptographically sealed, built from scratch.</p>
+    <div class="hero-actions">
+      <a href="#demo" class="btn-primary">Try the demo &rarr;</a>
+      <a href="#show" class="btn-ghost">How it works</a>
+    </div>
+  </div>
+
+  <!-- Nav -->
+  <nav class="hero-nav">
+    <div class="nav-logo-pill">
+      <svg width="16" height="16" viewBox="0 0 256 256" fill="none">
+        <path fill="rgba(255,255,255,0.80)" d="M 160 88 L 194 34 L 216 0 L 256 0 L 256 40 L 221.5 93.5 L 200 128 L 256 128 L 256 256 L 96 256 L 96 168 L 64.246 220 L 40 256 L 0 256 L 0 216 L 34 162 L 56 128 L 0 128 L 0 0 L 160 0 Z"/>
+      </svg>
+    </div>
+    <div class="nav-links-pill">
+      <a href="#show" class="nav-link">How it works</a>
+      <a href="#demo" class="nav-link">Demo</a>
+      <a href="#spec" class="nav-link">Architecture</a>
+      <a href="https://time.nileskv.me" target="_blank" rel="noreferrer" class="nav-link-time">NilesTime</a>
+      <a href="https://github.com/BonC-Dev/NilesKV" target="_blank" class="nav-link">GitHub</a>
+    </div>
+  </nav>
+
+  <div class="scroll-cue"><span>scroll</span><div class="scroll-cue-line"></div></div>
+</section>
+</div>
+
+<!-- ═══════════ TICKER ═══════════ -->
+<div class="ticker">
+  <div class="ticker-track">
+    <span class="ti">SHA-256 hashing</span><span class="ti">Merkle tree proofs</span><span class="ti">Write-Ahead Log</span><span class="ti">Git-style commits</span><span class="ti">Content-addressable</span><span class="ti">Optimistic concurrency</span><span class="ti">WAL crash recovery</span><span class="ti">Zero native deps</span><span class="ti">Branching support</span><span class="ti">Cryptographic integrity</span>
+    <span class="ti">SHA-256 hashing</span><span class="ti">Merkle tree proofs</span><span class="ti">Write-Ahead Log</span><span class="ti">Git-style commits</span><span class="ti">Content-addressable</span><span class="ti">Optimistic concurrency</span><span class="ti">WAL crash recovery</span><span class="ti">Zero native deps</span><span class="ti">Branching support</span><span class="ti">Cryptographic integrity</span>
+  </div>
+</div>
+
+<!-- ═══════════ SHOWCASE ═══════════ -->
+<div class="show-scroll" id="show">
+  <div class="show-sticky">
+    <div class="show-left">
+      <div class="show-panel" id="p0">
+        <div class="panel-step">01 &nbsp;/&nbsp; Insert</div>
+        <h2 class="panel-h">Every document<br>gets a <strong>fingerprint.</strong></h2>
+        <p class="panel-p">Insert any JSON object. NilesKV computes its SHA-256 hash and stores it at the content address. The same document always produces the same address — identical data deduplicates automatically.</p>
+        <div class="panel-pips"><div class="pip on"></div><div class="pip"></div><div class="pip"></div></div>
+      </div>
+      <div class="show-panel" id="p1">
+        <div class="panel-step">02 &nbsp;/&nbsp; Commit</div>
+        <h2 class="panel-h">Every fingerprint<br>is <strong>committed.</strong></h2>
+        <p class="panel-p">A commit folds all stored documents into a binary Merkle tree. The root hash is a single cryptographic fingerprint of the entire database state — computed in 202ms across 1,000 documents.</p>
+        <div class="panel-pips"><div class="pip"></div><div class="pip on"></div><div class="pip"></div></div>
+      </div>
+      <div class="show-panel" id="p2">
+        <div class="panel-step">03 &nbsp;/&nbsp; Prove</div>
+        <h2 class="panel-h">Every commitment<br>can be <strong>verified.</strong></h2>
+        <p class="panel-p">Generate a Merkle inclusion proof for any document. Anyone holding the root hash can verify the proof in 7 microseconds — no database access, no trust required.</p>
+        <div class="panel-pips"><div class="pip"></div><div class="pip"></div><div class="pip on"></div></div>
+      </div>
+    </div>
+
+    <div class="show-right">
+      <canvas id="showCanvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ DEMO ═══════════ -->
+<section class="section demo-sect" id="demo">
+  <div class="inner">
+    <div class="demo-hd">
+      <div><div class="sect-label" data-r="f">Interactive demo</div><h2 class="sect-h" data-r>Live API.<br><strong class="a">Real proofs.</strong></h2></div>
+      <p class="sect-sub" data-r>Insert a document, commit a Merkle snapshot, then generate a cryptographic inclusion proof against the running server.</p>
+    </div>
+    <div class="demo-grid">
+      <div class="steps">
+        <div class="sc active" id="s1"><div class="sc-hd"><div class="sc-n" id="n1">01</div><div><div class="sc-title">Insert Document</div><div class="sc-ep">POST /insert</div></div></div><div class="sc-body"><div class="fl"><label>Document ID</label><input class="fi" id="docId" type="text" value="user:alice"></div><div class="fl"><label>JSON Payload</label><textarea class="fi" id="docJson" rows="3">{"name":"Alice","role":"engineer","age":30}</textarea></div><button class="ab a" id="ib" onclick="doInsert()">Insert</button></div></div>
+        <div class="sc" id="s2"><div class="sc-hd"><div class="sc-n" id="n2">02</div><div><div class="sc-title">Commit Snapshot</div><div class="sc-ep">POST /commit</div></div></div><div class="sc-body"><div class="fl"><label>Commit Message</label><input class="fi" id="cmsg" type="text" value="feat: add user profile"></div><button class="ab a" id="cb" onclick="doCommit()">Commit</button></div></div>
+        <div class="sc" id="s3"><div class="sc-hd"><div class="sc-n" id="n3">03</div><div><div class="sc-title">Generate Proof</div><div class="sc-ep">GET /proof/:id</div></div></div><div class="sc-body"><div class="fl"><label>Document ID</label><input class="fi" id="pid" type="text" value="user:alice"></div><button class="ab b" id="pb" onclick="doProve()">Generate Proof</button></div></div>
+      </div>
+      <div class="term"><div class="term-bar"><div class="td r"></div><div class="td y"></div><div class="td g"></div><div class="term-ttl">nileskv response</div></div><div class="term-body" id="rtBody"><span class="term-ph">// awaiting request</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROOF VIZ -->
+<section class="section proof-section" id="proofSec" style="display:none">
+  <div class="inner">
+    <div class="sect-label" data-r="f">Merkle inclusion proof</div>
+    <div class="proof-grid">
+      <div><h2 class="sect-h" data-r>The path<br>to the <strong class="a">root.</strong></h2><p class="sect-sub" data-r style="margin-top:14px">Follow each SHA-256 operation from your document hash through sibling nodes to the Merkle root.</p></div>
+      <div><div class="pchain" id="pchain"></div><div class="proof-ok" id="pok"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Cryptographically verified</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- SPEC -->
+<section class="section spec-section" id="spec">
+  <div class="inner">
+    <div class="sect-label" data-r="f">Architecture</div>
+    <h2 class="sect-h" data-r>Every layer<br>hand-built.</h2>
+    <p class="sect-sub" data-r>No database engine. No ORM. The Merkle tree, WAL, and commit DAG are each implemented from scratch in Node.js.</p>
+    <div class="spec-list">
+      <div class="spec-item" data-r><div class="spec-n">01</div><div class="spec-main"><div class="spec-title">Content-Addressable Storage</div><div class="spec-desc">Documents are stored at their SHA-256 content hash. Identical content deduplicates automatically. Storage is immutable by design, enabling full auditability without special access controls.</div></div><div class="spec-aside"><span class="spec-val">SHA-256</span><span class="spec-val-l">Hash function</span></div></div>
+      <div class="spec-item" data-r><div class="spec-n">02</div><div class="spec-main"><div class="spec-title">Merkle Tree Proofs</div><div class="spec-desc">Every commit builds a binary Merkle tree over all stored documents. Any document produces a cryptographic inclusion proof verifiable by any third party with only the root hash.</div></div><div class="spec-aside"><span class="spec-val">O(log n)</span><span class="spec-val-l">Proof size</span></div></div>
+      <div class="spec-item" data-r><div class="spec-n">03</div><div class="spec-main"><div class="spec-title">Write-Ahead Log</div><div class="spec-desc">Every mutation is durably appended to the WAL before being applied in memory. On crash recovery the log replays atomically to restore consistent state.</div></div><div class="spec-aside"><span class="spec-val">O(1)</span><span class="spec-val-l">Durability cost</span></div></div>
+      <div class="spec-item" data-r><div class="spec-n">04</div><div class="spec-main"><div class="spec-title">Commit DAG</div><div class="spec-desc">Commits form a directed acyclic graph. Each node stores a parent hash, Merkle root, timestamp, and message. Full branching support mirrors Git internals.</div></div><div class="spec-aside"><span class="spec-val">DAG</span><span class="spec-val-l">Structure</span></div></div>
+      <div class="spec-item" data-r><div class="spec-n">05</div><div class="spec-main"><div class="spec-title">Optimistic Concurrency Control</div><div class="spec-desc">Concurrent writes are detected via per-document version vectors. Conflicting updates raise a typed ConcurrencyError rather than silently overwriting. No locks during reads.</div></div><div class="spec-aside"><span class="spec-val">OCC</span><span class="spec-val-l">Conflict model</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section class="stats-section" data-r>
+  <div class="inner">
+    <div class="stats-row">
+      <div class="stat"><div class="stat-n" data-count="175">0</div><div class="stat-l">Tests passing</div></div>
+      <div class="stat"><div class="stat-n" data-count="0">0</div><div class="stat-l">Native dependencies</div></div>
+      <div class="stat"><div class="stat-n">48h</div><div class="stat-l">Auto-wipe cycle</div></div>
+      <div class="stat"><div class="stat-n">30/m</div><div class="stat-l">Rate limit per IP</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="foot-in">
+    <div class="foot-logo">NilesKV<span>.</span></div>
+    <div class="foot-links"><a href="https://github.com/BonC-Dev/NilesKV" target="_blank" class="foot-link">GitHub</a><a href="#demo" class="foot-link">Demo</a><a href="#spec" class="foot-link">Architecture</a><a href="https://time.nileskv.me" target="_blank" rel="noreferrer" class="foot-link">NilesTime</a></div>
+    <div class="foot-copy">v1.5.0 &middot; MIT &middot; Demo data is public and wiped every 48h &mdash; don't store anything sensitive.</div>
+  </div>
+</footer>
+
+<script>
+/* ── Loader ──────────────────────────────────── */
+const MIN=900,t0=Date.now();
+function hideLoader(){setTimeout(()=>document.getElementById('loader').classList.add('out'),Math.max(0,MIN-(Date.now()-t0)));}
+
+/* ═══════════════════════════════════════════════
+   HERO CARD SCROLL ANIMATION
+   Cards start off-screen. As scrollY increases
+   within #heroScroll, they ease in. Scroll back
+   up → they ease back out.
+═══════════════════════════════════════════════ */
+(function(){
+  const wrapper=document.getElementById('heroScroll');
+  const left=[...document.querySelectorAll('.fc-wrap[data-side="left"]')];
+  const right=[...document.querySelectorAll('.fc-wrap[data-side="right"]')];
+  const OFF=420;
+
+  function easeOut(t){return 1-Math.pow(1-Math.max(0,Math.min(1,t)),3);}
+
+  // Set initial state before paint
+  left.forEach(el=>{el.style.cssText+='transform:translateX(-300px);opacity:0;';});
+  right.forEach(el=>{el.style.cssText+='transform:translateX(300px);opacity:0;';});
+
+  function update(){
+    const maxScroll=wrapper.offsetHeight-window.innerHeight;
+    if(maxScroll<=0)return;
+    const scrolled=Math.max(0,Math.min(maxScroll,window.scrollY));
+    const animEnd=maxScroll*0.62;
+
+    function apply(el,dir){
+      const s=+(el.dataset.stagger||0);
+      const offset=s*0.07;
+      const p=easeOut((scrolled/animEnd-offset)/(1-offset));
+      el.style.transform=`translateX(${(1-p)*OFF*dir}px)`;
+      el.style.opacity=p;
+    }
+    left.forEach(el=>apply(el,-1));
+    right.forEach(el=>apply(el,1));
+  }
+
+  window.addEventListener('scroll',update,{passive:true});
+  update();
+})();
+
+/* ═══════════════════════════════════════════════
+   MERKLE TREE CANVAS — completely redesigned
+   Large nodes, straight edges, glowing proof path,
+   pulsing amber highlight on phase 3.
+═══════════════════════════════════════════════ */
+(function(){
+  const scrollEl=document.getElementById('show');
+  const panels=[document.getElementById('p0'),document.getElementById('p1'),document.getElementById('p2')];
+  const canvas=document.getElementById('showCanvas');
+  const ctx=canvas.getContext('2d');
+
+  // HiDPI setup
+  const DPR=window.devicePixelRatio||1;
+  const W=540,H=480;
+  canvas.width=W*DPR; canvas.height=H*DPR;
+  canvas.style.width=W+'px'; canvas.style.height=H+'px';
+  ctx.scale(DPR,DPR);
+
+  const AMBER='#f5a623';
+  const AMBER_DIM='rgba(245,166,35,0.45)';
+  const WHITE='rgba(255,255,255,0.82)';
+  const WHITE_DIM='rgba(255,255,255,0.22)';
+
+  // Node layout
+  const SN=[
+    {x:270, y:72,  r:34, type:'root',   lbl:'ROOT HASH', sub:'a3f8c2d1'},
+    {x:138, y:222, r:24, type:'branch', lbl:'H(L)',       sub:'8b3d7e2f'},
+    {x:402, y:222, r:24, type:'branch', lbl:'H(R)',       sub:'c5a1f9e4'},
+    {x:54,  y:384, r:18, type:'leaf',   lbl:'doc:1',      sub:'1a2b3c4d'},
+    {x:222, y:384, r:18, type:'leaf',   lbl:'doc:2',      sub:'5e6f7a8b'},
+    {x:318, y:384, r:18, type:'leaf',   lbl:'doc:3',      sub:'9c0d1e2f'},
+    {x:486, y:384, r:18, type:'leaf',   lbl:'doc:4',      sub:'3a4b5c6d'},
+  ];
+  const EDGES=[[0,1],[0,2],[1,3],[1,4],[2,5],[2,6]];
+
+  // Proof path for doc:1 = nodes 3→1→0, edges 1,3 / 0,1
+  const PROOF_NODES=new Set([3,1,0]);
+  const PROOF_EDGES=new Set(['0,1','1,3']);
+
+  let vis=new Array(7).fill(0);
+  let eVis=new Array(6).fill(0);
+  let phase=0, raf=null;
+
+  function drawEdge(i0,i1,alpha,hl,t){
+    if(alpha<0.005)return;
+    const a=SN[i0],b=SN[i1];
+    // From bottom of parent to top of child
+    const x1=a.x, y1=a.y+a.r+2;
+    const x2=b.x, y2=b.y-b.r-2;
+
+    ctx.save();
+    ctx.globalAlpha=alpha;
+    if(hl){
+      // Glow pass
+      ctx.shadowColor=AMBER;
+      ctx.shadowBlur=18;
+      ctx.strokeStyle=AMBER;
+      ctx.lineWidth=3.5;
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.shadowBlur=0;
+    }
+    ctx.strokeStyle=hl?AMBER:WHITE_DIM;
+    ctx.lineWidth=hl?2.5:1.2;
+    ctx.setLineDash(hl?[]:[5,7]);
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function drawNode(n,alpha,hl,t){
+    if(alpha<0.005)return;
+    ctx.save();
+    ctx.globalAlpha=alpha;
+
+    // Outer glow for highlighted nodes
+    if(hl){
+      const pulse=0.6+0.4*Math.sin(t/500);
+      const gr=ctx.createRadialGradient(n.x,n.y,n.r*0.5,n.x,n.y,n.r*3.5);
+      gr.addColorStop(0,`rgba(245,166,35,${0.4*pulse})`);
+      gr.addColorStop(1,'rgba(245,166,35,0)');
+      ctx.fillStyle=gr;
+      ctx.beginPath(); ctx.arc(n.x,n.y,n.r*3.5,0,Math.PI*2); ctx.fill();
+    }
+
+    // Node body
+    ctx.fillStyle=hl?'rgba(245,166,35,0.18)':
+                  n.type==='root'?'rgba(245,166,35,0.10)':
+                  'rgba(10,10,18,0.95)';
+    ctx.strokeStyle=hl?AMBER:
+                    n.type==='root'?AMBER_DIM:
+                    'rgba(255,255,255,0.22)';
+    ctx.lineWidth=hl?2.5:1.5;
+    if(hl){ctx.shadowColor=AMBER;ctx.shadowBlur=10;}
+    ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
+    ctx.fill(); ctx.stroke();
+    ctx.shadowBlur=0;
+
+    // Label
+    ctx.fillStyle=hl?'#f5a623':n.type==='root'?'rgba(245,166,35,0.9)':WHITE;
+    ctx.font=`500 ${n.type==='root'?10.5:9.5}px "JetBrains Mono",monospace`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(n.lbl,n.x,n.y-(n.type!=='root'?1:0));
+
+    // Sub-hash below node
+    ctx.fillStyle=hl?'rgba(245,166,35,0.65)':'rgba(255,255,255,0.28)';
+    ctx.font=`9px "JetBrains Mono",monospace`;
+    ctx.fillText(n.sub+'…',n.x,n.y+n.r+14);
+
+    ctx.restore();
+  }
+
+  function tick(){
+    const t=Date.now();
+    const sp=0.018;
+
+    if(phase===0){
+      // Reveal leaf layer
+      [3,4,5,6].forEach(i=>{vis[i]=Math.min(1,vis[i]+sp);});
+    } else if(phase===1){
+      // Reveal branch layer + edges from leaves
+      [3,4,5,6].forEach(i=>{vis[i]=Math.min(1,vis[i]+sp*2);});
+      [2,3,4,5].forEach(i=>{eVis[i]=Math.min(1,eVis[i]+sp*1.5);});
+      [1,2].forEach(i=>{vis[i]=Math.min(1,vis[i]+sp);});
+    } else {
+      // Reveal root + top edges
+      [0,1,2].forEach(i=>{vis[i]=Math.min(1,vis[i]+sp*2);});
+      [0,1].forEach(i=>{eVis[i]=Math.min(1,eVis[i]+sp*2);});
+    }
+
+    ctx.clearRect(0,0,W,H);
+
+    // Draw edges first (behind nodes)
+    EDGES.forEach(([a,b],ei)=>{
+      const key=`${Math.min(a,b)},${Math.max(a,b)}`;
+      const hl=phase===2&&PROOF_EDGES.has(key);
+      drawEdge(a,b,eVis[ei],hl,t);
+    });
+
+    // Draw nodes on top
+    SN.forEach((n,ni)=>{
+      const hl=phase===2&&PROOF_NODES.has(ni);
+      drawNode(n,vis[ni],hl,t);
+    });
+
+    raf=requestAnimationFrame(tick);
+  }
+
+  let curPhase=-1;
+  function onScroll(){
+    const rect=scrollEl.getBoundingClientRect();
+    const total=scrollEl.offsetHeight-window.innerHeight;
+    const prog=Math.max(0,Math.min(1,-rect.top/total));
+    const ph=prog<0.33?0:prog<0.66?1:2;
+    if(ph!==curPhase){
+      if(curPhase>=0) panels[curPhase].classList.remove('active');
+      panels[ph].classList.add('active');
+      curPhase=ph; phase=ph;
+    }
+  }
+
+  window.addEventListener('scroll',onScroll,{passive:true});
+  onScroll();
+
+  const io=new IntersectionObserver(es=>{
+    es.forEach(e=>{
+      if(e.isIntersecting){if(!raf)tick();}
+      else{cancelAnimationFrame(raf);raf=null;}
+    });
+  });
+  io.observe(scrollEl);
+  panels[0].classList.add('active');
+})();
+
+/* ── Reveal on scroll ───────────────────────── */
+function initReveal(){
+  const io=new IntersectionObserver(es=>{es.forEach(e=>{if(!e.isIntersecting)return;setTimeout(()=>e.target.classList.add('in'),+(e.target.dataset.delay||0));io.unobserve(e.target);});},{threshold:.08,rootMargin:'0px 0px -40px 0px'});
+  document.querySelectorAll('[data-r]').forEach(el=>{const sibs=[...el.parentElement.children].filter(c=>c.hasAttribute('data-r'));const idx=sibs.indexOf(el);if(idx>0&&!el.dataset.delay)el.dataset.delay=idx*90;io.observe(el);});
+}
+
+/* ── Counters ───────────────────────────────── */
+function initCounters(){
+  const io=new IntersectionObserver(es=>{es.forEach(e=>{if(!e.isIntersecting)return;const el=e.target,target=+el.dataset.count;const dur=1400,start=performance.now();const ease=t=>1-Math.pow(1-t,3);(function f(now){const p=Math.min((now-start)/dur,1);el.textContent=Math.round(ease(p)*target);if(p<1)requestAnimationFrame(f);})(start);io.unobserve(el);});},{threshold:.5});
+  document.querySelectorAll('[data-count]').forEach(el=>io.observe(el));
+}
+
+/* ── Terminal ───────────────────────────────── */
+let rtL=[];
+function renderRT(){const b=document.getElementById('rtBody');b.innerHTML=rtL.join('');b.scrollTop=b.scrollHeight;}
+function rtReq(m,p){rtL.push(`<div><span class="t-req">-> ${m} ${p}</span></div>`);}
+function hl(v,d=0){if(v===null)return`<span class="t-b">null</span>`;if(typeof v==='boolean')return`<span class="t-b">${v}</span>`;if(typeof v==='number')return`<span class="t-n">${v}</span>`;if(typeof v==='string'){if(/^[0-9a-f]{32,}$/i.test(v))return`<span class="t-h" onclick="cpTxt('${v}')" title="copy">"${v.slice(0,10)}...${v.slice(-6)}"</span>`;return`<span class="t-s">"${v}"</span>`;}if(Array.isArray(v)){if(!v.length)return'[]';const p='  '.repeat(d+1),p0='  '.repeat(d);return`[\n${v.map(x=>`${p}${hl(x,d+1)}`).join(',\n')}\n${p0}]`;}if(typeof v==='object'){const p='  '.repeat(d+1),p0='  '.repeat(d);const es=Object.entries(v);if(!es.length)return'{}';return`{\n${es.map(([k,x])=>`${p}<span class="t-k">"${k}"</span>: ${hl(x,d+1)}`).join(',\n')}\n${p0}}`;}return String(v);}
+function rtRes(d,ok=true){rtL.push(`<div><span class="${ok?'t-ok':'t-err'}">${ok?'<- OK':'<- ERR'}</span> ${hl(d)}</div>`);rtL.push(`<div><span class="t-dim">---</span></div>`);}
+function cpTxt(s){navigator.clipboard.writeText(s).then(()=>toast('Hash copied','success'));}
+
+/* ── Steps ──────────────────────────────────── */
+let cur=1;
+function setStep(n){cur=n;[1,2,3].forEach(i=>{const c=document.getElementById(`s${i}`),nm=document.getElementById(`n${i}`);c.classList.remove('active','done');if(i<n){c.classList.add('done');nm.textContent='✓';}else if(i===n){c.classList.add('active');nm.textContent=`0${i}`;}else{nm.textContent=`0${i}`;}});}
+
+async function doInsert(){const id=document.getElementById('docId').value.trim(),raw=document.getElementById('docJson').value,btn=document.getElementById('ib');let doc;try{doc=JSON.parse(raw);}catch{toast('Invalid JSON','error');return;}btn.disabled=true;btn.textContent='Inserting…';rtReq('POST','/insert');renderRT();try{const r=await fetch('/insert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,doc})});const data=await r.json();rtRes(data,r.ok);renderRT();if(r.ok){document.getElementById('pid').value=id;toast('Document staged','success');setStep(2);}else toast(data.message||'Insert failed','error');}catch(e){rtRes({error:'Network Error',message:e.message},false);renderRT();toast('Network error','error');}finally{btn.disabled=false;btn.textContent='Insert';}}
+async function doCommit(){const msg=document.getElementById('cmsg').value.trim(),btn=document.getElementById('cb');if(!msg){toast('Enter a commit message','error');return;}btn.disabled=true;btn.textContent='Committing…';rtReq('POST','/commit');renderRT();try{const r=await fetch('/commit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});const data=await r.json();rtRes(data,r.ok);renderRT();if(r.ok){toast('Committed. Merkle root generated.','success');setStep(3);}else toast(data.message||'Commit failed','error');}catch(e){rtRes({error:'Network Error',message:e.message},false);renderRT();toast('Network error','error');}finally{btn.disabled=false;btn.textContent='Commit';}}
+async function doProve(){const id=document.getElementById('pid').value.trim(),btn=document.getElementById('pb');if(!id){toast('Enter a document ID','error');return;}btn.disabled=true;btn.textContent='Generating…';rtReq('GET',`/proof/${id}`);renderRT();try{const r=await fetch(`/proof/${encodeURIComponent(id)}`);const data=await r.json();rtRes(data,r.ok);renderRT();if(r.ok){toast(`Verified. ${data.proof?.length??0} Merkle steps.`,'success');setStep(4);showProof(data);}else toast(data.message||'Proof failed','error');}catch(e){rtRes({error:'Network Error',message:e.message},false);renderRT();toast('Network error','error');}finally{btn.disabled=false;btn.textContent='Generate Proof';}}
+
+/* ── Proof viz ──────────────────────────────── */
+function showProof(data){const sec=document.getElementById('proofSec'),ch=document.getElementById('pchain'),ok=document.getElementById('pok');sec.style.display='';ch.innerHTML='';ok.classList.remove('show');setTimeout(()=>sec.scrollIntoView({behavior:'smooth',block:'start'}),120);const nodes=[{type:'leaf',tag:'Document hash',hash:data.docHash},...(data.proof||[]).flatMap((p,i)=>[{type:'sib',tag:`Sibling ${i+1} (${p.position})`,hash:p.hash},{type:'hsh',tag:'SHA-256(left || right)',hash:null}]),{type:'mroot',tag:'Merkle root',hash:data.rootHash}];nodes.forEach((n,i)=>{const el=document.createElement('div');el.className=`pn ${n.type}`;const h=n.hash?(n.hash.length>20?`${n.hash.slice(0,14)}…${n.hash.slice(-8)}`:n.hash):'SHA-256 of concatenation';el.innerHTML=`<div class="pn-marker"><div class="pn-dot"></div></div><div><div class="pn-tag">${n.tag}</div><div class="pn-hash">${h}</div></div>`;ch.appendChild(el);setTimeout(()=>el.classList.add('show'),80+i*90);});setTimeout(()=>ok.classList.add('show'),80+nodes.length*90+200);}
+
+/* ── Toast ──────────────────────────────────── */
+function toast(msg,type='info'){const wrap=document.getElementById('toasts');const el=document.createElement('div');el.className=`toast ${type}`;el.innerHTML=`<div class="tpip"></div>${msg}`;wrap.appendChild(el);setTimeout(()=>{el.classList.add('out');el.addEventListener('animationend',()=>el.remove(),{once:true});},3500);}
+
+/* ── Keyboard ───────────────────────────────── */
+document.addEventListener('keydown',e=>{if(!(e.metaKey||e.ctrlKey)||e.key!=='Enter')return;e.preventDefault();if(cur===1)doInsert();else if(cur===2)doCommit();else if(cur===3)doProve();});
+
+/* ── Cursor blob + title spotlight ─────────── */
+(function(){
+  const blob = document.getElementById('cursorBlob');
+  const titleLit = document.getElementById('titleLit');
+  const titleWrap = document.getElementById('titleWrap');
+  const hero = document.querySelector('.hero');
+
+  // Target mouse position
+  let mx = window.innerWidth / 2, my = window.innerHeight / 2;
+  // Lerped blob position
+  let bx = mx, by = my;
+  // Whether mouse is in hero
+  let inHero = false;
+
+  document.addEventListener('mousemove', e => {
+    mx = e.clientX;
+    my = e.clientY;
+
+    // Update the title mask relative to the title element
+    const rect = titleWrap.getBoundingClientRect();
+    const rx = e.clientX - rect.left;
+    const ry = e.clientY - rect.top;
+    const mask = `radial-gradient(circle 180px at ${rx}px ${ry}px, #000 0%, transparent 68%)`;
+    titleLit.style.webkitMaskImage = mask;
+    titleLit.style.maskImage = mask;
+  });
+
+  // Show/hide blob when entering/leaving hero
+  hero.addEventListener('mouseenter', () => {
+    inHero = true;
+    blob.style.opacity = '1';
+  });
+  hero.addEventListener('mouseleave', () => {
+    inHero = false;
+    blob.style.opacity = '0';
+    // Reset mask off-screen
+    const offMask = 'radial-gradient(circle 180px at -999px -999px, #000 0%, transparent 68%)';
+    titleLit.style.webkitMaskImage = offMask;
+    titleLit.style.maskImage = offMask;
+  });
+
+  // Smooth blob animation loop
+  function frame() {
+    requestAnimationFrame(frame);
+    const ease = 0.09;
+    bx += (mx - bx) * ease;
+    by += (my - by) * ease;
+    blob.style.transform = `translate(${bx - blob.offsetWidth/2}px, ${by - blob.offsetHeight/2}px)`;
+  }
+  frame();
+})();
+
+/* ── Boot ───────────────────────────────────── */
+window.addEventListener('load',()=>{hideLoader();initReveal();initCounters();});
+</script>
+</body>
+</html>
