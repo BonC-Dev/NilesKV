@@ -1,0 +1,26 @@
+{
+  "name": "nileskv",
+  "version": "1.5.0",
+  "description": "NilesKV: A content-addressable, version-controlled state engine with Merkle proofs, WAL durability, and Git-style branching",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/.bin/jest --runInBand"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "jest": "^30.4.2"
+  },
+  "jest": {
+    "extensionsToTreatAsEsm": [],
+    "transform": {}
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.1.0",
+    "node-cron": "^4.2.1"
+  }
+}
