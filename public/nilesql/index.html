@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NilesQL</title>
+  <meta name="description" content="Interactive demo for NilesQL -- a query language built on top of NilesKV.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:      #000;
+      --s1:      #050505;
+      --line:    rgba(255,255,255,0.09);
+      --line2:   rgba(255,255,255,0.16);
+      --t1:      rgba(255,255,255,0.95);
+      --t2:      rgba(255,255,255,0.55);
+      --t3:      rgba(255,255,255,0.18);
+      --amber:   #f5a623;
+      --amber-a: rgba(245,166,35,0.12);
+      --amber-b: rgba(245,166,35,0.25);
+      --sky:     #38bdf8;
+      --sky-a:   rgba(56,189,248,0.10);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--t1);
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-thumb { background: #1c1c1c; border-radius: 2px; }
+
+    /* Nav */
+    .nav {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px 32px; gap: 8px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    .nav-logo { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--t2); text-decoration: none; transition: color .2s; }
+    .nav-logo:hover { color: var(--t1); }
+    .nav-sep { color: var(--t3); font-size: 13px; padding: 0 4px; }
+    .nav-cur { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--sky); }
+    .nav-links { display: flex; align-items: center; gap: 24px; margin-left: auto; }
+    .nav-link { font-size: 12px; color: var(--t2); text-decoration: none; transition: color .2s; }
+    .nav-link:hover { color: var(--t1); }
+
+    /* Hero */
+    .hero {
+      padding: 80px 48px 64px;
+      text-align: center;
+      position: relative;
+      background:
+        radial-gradient(ellipse 800px 600px at 20% 50%, rgba(56,189,248,0.12) 0%, transparent 60%),
+        radial-gradient(ellipse 700px 500px at 80% 40%, rgba(245,166,35,0.10) 0%, transparent 60%),
+        #000;
+    }
+    .hero-tag {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--sky); padding: 5px 14px; border-radius: 100px;
+      border: 1px solid rgba(56,189,248,0.3);
+      background: rgba(56,189,248,0.08);
+      margin-bottom: 20px;
+    }
+    .hero-tag-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--sky); animation: pulse 2.2s ease infinite; }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(56,189,248,0.6);}50%{box-shadow:0 0 0 5px rgba(56,189,248,0);} }
+    .hero-title {
+      font-size: clamp(52px, 7vw, 96px);
+      font-weight: 700; letter-spacing: -0.05em; line-height: 0.9;
+      color: #fff;
+      text-shadow: 0 0 120px rgba(56,189,248,0.25), 0 0 60px rgba(56,189,248,0.12);
+      margin-bottom: 18px;
+    }
+    .hero-sub {
+      font-size: 15px; color: var(--t2); font-weight: 300;
+      max-width: 420px; margin: 0 auto; line-height: 1.7;
+    }
+
+    /* Main layout */
+    .main { max-width: 1100px; margin: 0 auto; padding: 48px 32px 80px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+
+    /* Panel shared */
+    .panel {
+      border-radius: 12px;
+      border: 1px solid var(--line2);
+      background: rgba(6,6,10,0.90);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      overflow: hidden;
+    }
+    .panel-bar {
+      display: flex; align-items: center; gap: 6px;
+      padding: 10px 14px; border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,0.02);
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+    .panel-ttl { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--t2); margin-left: 6px; }
+
+    /* Query panel */
+    .query-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .query-input {
+      width: 100%; background: rgba(255,255,255,0.03);
+      border: 1px solid var(--line2); border-radius: 8px;
+      padding: 14px 16px; color: var(--t1);
+      font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.65;
+      outline: none; resize: none; min-height: 90px;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .query-input:focus { border-color: rgba(56,189,248,0.5); box-shadow: 0 0 0 3px rgba(56,189,248,0.08); }
+    .query-input::placeholder { color: rgba(255,255,255,0.18); }
+    .query-actions { display: flex; align-items: center; gap: 10px; }
+    .btn-run {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 9px 22px; border-radius: 8px;
+      background: var(--amber); color: #000;
+      font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+      border: none; cursor: pointer;
+      transition: opacity .15s, transform .15s, box-shadow .2s;
+    }
+    .btn-run:hover { opacity: 0.88; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(245,166,35,0.25); }
+    .btn-run:active { transform: none; }
+    .btn-run svg { flex-shrink: 0; }
+    .kbd { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--t3); margin-left: auto; }
+
+    /* Examples */
+    .examples-label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--t3); font-family: 'JetBrains Mono', monospace; margin-bottom: 8px; }
+    .examples { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ex {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      color: rgba(255,255,255,0.55); padding: 5px 10px; border-radius: 6px;
+      border: 1px solid var(--line); background: transparent;
+      cursor: pointer; transition: color .15s, border-color .15s, background .15s;
+      text-align: left;
+    }
+    .ex:hover { color: var(--sky); border-color: rgba(56,189,248,0.35); background: rgba(56,189,248,0.06); }
+
+    /* Schema reference */
+    .schema { margin-top: 4px; padding: 12px 16px; border-top: 1px solid var(--line); }
+    .schema-title { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--t3); font-family: 'JetBrains Mono', monospace; margin-bottom: 10px; }
+    .schema-row { display: flex; gap: 8px; align-items: baseline; margin-bottom: 5px; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+    .schema-key { color: var(--sky); min-width: 72px; }
+    .schema-fields { color: var(--t2); }
+    .schema-type { color: rgba(255,255,255,0.28); font-size: 10px; margin-left: 6px; }
+
+    /* Results panel */
+    .results-body {
+      padding: 16px 20px;
+      font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.8;
+      min-height: 320px; max-height: 560px; overflow-y: auto;
+      color: var(--t2);
+    }
+    .results-body::-webkit-scrollbar { width: 3px; }
+    .results-body::-webkit-scrollbar-thumb { background: #1c1c1c; }
+    .res-placeholder { color: rgba(255,255,255,0.14); font-style: italic; }
+    .res-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+    .res-count {
+      font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--amber); padding: 3px 10px; border-radius: 4px;
+      border: 1px solid rgba(245,166,35,0.28); background: rgba(245,166,35,0.08);
+    }
+    .res-time { font-size: 10px; color: var(--t3); }
+    .res-error { color: #f87171; }
+    .res-item { margin-bottom: 14px; }
+    .res-item-key { color: var(--amber); margin-bottom: 3px; }
+    .res-item-doc { color: var(--t2); white-space: pre; }
+    .j-key { color: #9da5ff; }
+    .j-str { color: #7fd6a0; }
+    .j-num { color: var(--amber); }
+    .j-bool { color: #f87171; }
+    .j-null { color: #f87171; }
+
+    /* Syntax reference */
+    .syntax { border-top: 1px solid var(--line); padding: 40px 32px; max-width: 1100px; margin: 0 auto; }
+    .syntax-title { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--t3); font-family: 'JetBrains Mono', monospace; margin-bottom: 20px; display: flex; align-items: center; gap: 14px; }
+    .syntax-title::before { content: ''; width: 20px; height: 1px; background: var(--t3); }
+    .syntax-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .syntax-card { padding: 14px 16px; border-radius: 8px; border: 1px solid var(--line); background: rgba(255,255,255,0.02); }
+    .syntax-expr { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--sky); margin-bottom: 6px; }
+    .syntax-desc { font-size: 12px; color: var(--t2); line-height: 1.5; }
+
+    @media (max-width: 800px) {
+      .main { grid-template-columns: 1fr; }
+      .syntax-grid { grid-template-columns: 1fr 1fr; }
+      .hero { padding: 60px 24px 48px; }
+    }
+    @media (max-width: 500px) {
+      .syntax-grid { grid-template-columns: 1fr; }
+      .main { padding: 24px 16px 60px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="/" class="nav-logo">NilesKV</a>
+  <span class="nav-sep">/</span>
+  <span class="nav-cur">NilesQL</span>
+  <div class="nav-links">
+    <a href="/#demo" class="nav-link">API Demo</a>
+    <a href="/#spec" class="nav-link">Architecture</a>
+    <a href="https://github.com/BonC-Dev/NilesKV" target="_blank" rel="noreferrer" class="nav-link">GitHub</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-tag"><span class="hero-tag-dot"></span>Client-side query engine</div>
+  <h1 class="hero-title">NilesQL</h1>
+  <p class="hero-sub">A query language for NilesKV. Filter documents by key pattern and field conditions. Runs on top of the field index built at commit time.</p>
+</section>
+
+<div class="main">
+
+  <!-- Left: query editor -->
+  <div style="display:flex;flex-direction:column;gap:16px;">
+    <div class="panel">
+      <div class="panel-bar">
+        <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+        <span class="panel-ttl">nilesql query</span>
+      </div>
+      <div class="query-body">
+        <textarea class="query-input" id="queryInput" rows="3" spellcheck="false" placeholder="GET user:* WHERE role = &quot;admin&quot;"></textarea>
+        <div class="query-actions">
+          <button class="btn-run" id="runBtn" onclick="runQuery()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+            Run
+          </button>
+          <span class="kbd">cmd+enter</span>
+        </div>
+        <div>
+          <div class="examples-label">Examples</div>
+          <div class="examples" id="examples"></div>
+        </div>
+      </div>
+      <div class="schema">
+        <div class="schema-title">Demo dataset</div>
+        <div class="schema-row"><span class="schema-key">user:1..10</span><span class="schema-fields">name, role<span class="schema-type">admin|editor|viewer</span>, age<span class="schema-type">number</span>, active<span class="schema-type">bool</span></span></div>
+        <div class="schema-row"><span class="schema-key">order:1..5</span><span class="schema-fields">item, amount<span class="schema-type">number</span>, status<span class="schema-type">pending|fulfilled|cancelled</span></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: results -->
+  <div class="panel">
+    <div class="panel-bar">
+      <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+      <span class="panel-ttl">results</span>
+    </div>
+    <div class="results-body" id="results">
+      <span class="res-placeholder">// run a query to see results</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- Syntax reference -->
+<section class="syntax">
+  <div class="syntax-title">Query syntax</div>
+  <div class="syntax-grid">
+    <div class="syntax-card"><div class="syntax-expr">GET *</div><div class="syntax-desc">Return every document in the store.</div></div>
+    <div class="syntax-card"><div class="syntax-expr">GET user:*</div><div class="syntax-desc">Return all documents whose key starts with <code style="color:var(--sky)">user:</code>.</div></div>
+    <div class="syntax-card"><div class="syntax-expr">GET user:alice</div><div class="syntax-desc">Return the single document at the exact key.</div></div>
+    <div class="syntax-card"><div class="syntax-expr">GET user:* WHERE role = "admin"</div><div class="syntax-desc">Equality filter on a string field.</div></div>
+    <div class="syntax-card"><div class="syntax-expr">GET order:* WHERE amount > 100</div><div class="syntax-desc">Numeric comparison: <code style="color:var(--sky)">&gt; &lt; &gt;= &lt;= != =</code></div></div>
+    <div class="syntax-card"><div class="syntax-expr">GET user:* WHERE role = "admin" AND active = true</div><div class="syntax-desc">Chain conditions with AND.</div></div>
+  </div>
+</section>
+
+<script type="module">
+import { tokenize } from './lexer.js';
+import { parse }    from './parser.js';
+import { evaluate } from './evaluator.js';
+
+// Demo dataset
+const DOCS = {
+  'user:1':  { name: 'Alice',   role: 'admin',  age: 28, active: true  },
+  'user:2':  { name: 'Bob',     role: 'editor', age: 34, active: true  },
+  'user:3':  { name: 'Charlie', role: 'viewer', age: 22, active: false },
+  'user:4':  { name: 'Diana',   role: 'admin',  age: 41, active: true  },
+  'user:5':  { name: 'Eve',     role: 'editor', age: 29, active: false },
+  'user:6':  { name: 'Frank',   role: 'viewer', age: 37, active: true  },
+  'user:7':  { name: 'Grace',   role: 'admin',  age: 25, active: true  },
+  'user:8':  { name: 'Henry',   role: 'viewer', age: 45, active: false },
+  'user:9':  { name: 'Iris',    role: 'editor', age: 31, active: true  },
+  'user:10': { name: 'Jack',    role: 'viewer', age: 27, active: false },
+  'order:1': { item: 'Keyboard', amount: 149, status: 'fulfilled'  },
+  'order:2': { item: 'Monitor',  amount: 399, status: 'pending'    },
+  'order:3': { item: 'Mouse',    amount: 49,  status: 'cancelled'  },
+  'order:4': { item: 'Webcam',   amount: 89,  status: 'pending'    },
+  'order:5': { item: 'Headset',  amount: 199, status: 'fulfilled'  },
+};
+
+const EXAMPLES = [
+  'GET *',
+  'GET user:*',
+  'GET user:* WHERE role = "admin"',
+  'GET user:* WHERE age > 30',
+  'GET user:* WHERE active = false',
+  'GET user:* WHERE role = "admin" AND active = true',
+  'GET order:* WHERE amount > 100',
+  'GET order:* WHERE status = "pending"',
+  'GET order:* WHERE amount > 100 AND status = "pending"',
+];
+
+// Render example chips
+const exContainer = document.getElementById('examples');
+EXAMPLES.forEach(q => {
+  const btn = document.createElement('button');
+  btn.className = 'ex';
+  btn.textContent = q;
+  btn.onclick = () => {
+    document.getElementById('queryInput').value = q;
+    runQuery();
+  };
+  exContainer.appendChild(btn);
+});
+
+// Syntax-highlight a JSON value
+function hlValue(val) {
+  if (val === null)             return `<span class="j-null">null</span>`;
+  if (typeof val === 'boolean') return `<span class="j-bool">${val}</span>`;
+  if (typeof val === 'number')  return `<span class="j-num">${val}</span>`;
+  if (typeof val === 'string')  return `<span class="j-str">"${val}"</span>`;
+  return String(val);
+}
+
+function renderDoc(doc) {
+  const lines = ['  {'];
+  const entries = Object.entries(doc);
+  entries.forEach(([k, v], i) => {
+    const comma = i < entries.length - 1 ? ',' : '';
+    lines.push(`    <span class="j-key">"${k}"</span>: ${hlValue(v)}${comma}`);
+  });
+  lines.push('  }');
+  return lines.join('\n');
+}
+
+function runQuery() {
+  const raw = document.getElementById('queryInput').value.trim();
+  const out  = document.getElementById('results');
+
+  if (!raw) {
+    out.innerHTML = '<span class="res-placeholder">// enter a query above</span>';
+    return;
+  }
+
+  const t0 = performance.now();
+  let results, elapsed;
+
+  try {
+    const tokens = tokenize(raw);
+    const ast    = parse(tokens);
+    results      = evaluate(ast, DOCS);
+    elapsed      = (performance.now() - t0).toFixed(2);
+  } catch (err) {
+    out.innerHTML = `<span class="res-error">Error: ${err.message}</span>`;
+    return;
+  }
+
+  if (results.length === 0) {
+    out.innerHTML = `
+      <div class="res-meta">
+        <span class="res-count">0 results</span>
+        <span class="res-time">${elapsed}ms</span>
+      </div>
+      <span class="res-placeholder">// no documents matched</span>`;
+    return;
+  }
+
+  const items = results.map(({ key, doc }) =>
+    `<div class="res-item"><div class="res-item-key">"${key}":</div><div class="res-item-doc">${renderDoc(doc)}</div></div>`
+  ).join('');
+
+  out.innerHTML = `
+    <div class="res-meta">
+      <span class="res-count">${results.length} result${results.length !== 1 ? 's' : ''}</span>
+      <span class="res-time">${elapsed}ms</span>
+    </div>
+    ${items}`;
+}
+
+// Expose to onclick attribute
+window.runQuery = runQuery;
+
+// Cmd+Enter / Ctrl+Enter shortcut
+document.getElementById('queryInput').addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault();
+    runQuery();
+  }
+});
+</script>
+
+</body>
+</html>
